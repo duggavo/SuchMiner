@@ -1,5 +1,5 @@
 /* SuchMiner
- * Copyright 2022 duggavo
+ * Copyright 2024 duggavo
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,10 +19,11 @@ package main
 
 import (
 	"bufio"
-	"errors"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"regexp"
@@ -35,26 +36,19 @@ var debug = false
 
 var Log *log.Logger
 
-const VERSION = "1.0.0"
-
-const Reset = "\u001b[0m"
-const Red = "\u001b[31m"
-const Green = "\u001b[32m"
-const Yellow = "\u001b[33m"
-const Magenta = "\u001b[35m"
-const Cyan = "\u001b[36m"
-const Bright = "\u001b[1m"
+const VERSION = "2.0.0"
 
 var hashrate float64 = 0
+var difficulty float64 = 0
+var poolUrl string = ""
 
 var hashrateRegex = regexp.MustCompile(`10s\/60s\/15m [\d\.n/a]+ [\d\.n/a]+`)
 
-var addressRegex = regexp.MustCompile("^W[Wo][0-9AB][123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{94}$")
+var addressRegex = regexp.MustCompile("^Wo[0-9AB][123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{94}$")
 var spendKeyRegex = regexp.MustCompile("^[0-9a-fA-F]{64}$")
 
-var address string
-var spendKey string
-var url string
+const detect_donate = "wowrig.mooo.com"
+const deps_folder = "deps_" + runtime.GOOS
 
 func main() {
 	flag.BoolVar(&debug, "debug", false, "")
@@ -67,19 +61,28 @@ func main() {
 	}
 
 	Log.Println(Reset + Cyan)
-	Log.Println(Cyan+"Starting", Magenta+Bright+"Such"+Yellow+"Miner "+Reset+Cyan+"v"+VERSION)
-	Log.Println(Reset)
+	Log.Println(Cyan+"Starting", Magenta+Bright+"Such"+Yellow+"Miner "+Reset+Cyan+"v"+VERSION+
+		"\n"+Reset)
 
-	if _, err := os.Stat("./deps/config.json"); errors.Is(err, os.ErrNotExist) {
-		getConfig()
-		setConfig()
+	if err := loadConfig(); err != nil {
+		if debug {
+			Log.Println(err)
+		}
+		configPrompt()
+		if err := saveConfig(); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := saveConfig(); err != nil {
+			Log.Println(Red + err.Error() + Reset)
+		}
 	}
 
 	var wowrig *exec.Cmd
 	if runtime.GOOS == "windows" {
-		wowrig = exec.Command("./deps/wowrig.exe", "--no-color")
+		wowrig = exec.Command(deps_folder+"/xmrig.exe", "--no-color")
 	} else {
-		wowrig = exec.Command("./deps/wowrig", "--no-color")
+		wowrig = exec.Command(deps_folder+"/xmrig", "--no-color")
 	}
 
 	var outb saveOutput
@@ -87,47 +90,82 @@ func main() {
 
 	Log.Println(Cyan + "Miner started")
 
-	wowrig.Run()
+	err := wowrig.Run()
+	if err != nil {
+		Log.Println(Bright+Red+"error running wowrig:", err)
+	}
 }
 
-func getConfig() {
-
-	address = Prompt(Cyan + "Wownero address: " + Reset)
-	spendKey = Prompt(Cyan + "Spend key: " + Reset)
-	isRunningDaemon := Prompt(Cyan + "Are you running a Wownero daemon? (y/n) " + Reset)
-	if strings.HasPrefix(isRunningDaemon, "y") {
-		url = "127.0.0.1:34568"
-	} else {
-		url = "wowrig.mooo.com:34568"
+func configPrompt() {
+	for {
+		cfg.Wallet = Prompt(Cyan + "Wownero primary address (starts with Wo...): " + Reset)
+		if !addressRegex.Match([]byte(cfg.Wallet)) {
+			Log.Println(Red + "Error: address '" + cfg.Wallet + "' is not valid" + Reset)
+			continue
+		}
+		break
 	}
-
-	if !addressRegex.Match([]byte(address)) {
-		fmt.Println(Red + "Error: address '" + address + "' is not valid")
-		return
-	} else if !spendKeyRegex.Match([]byte(spendKey)) {
-		fmt.Println(Red + "Error: spend key is not valid")
-		return
+	for {
+		cfg.SpendSecretKey = Prompt(Cyan + "Secret spend key: " + Reset)
+		if !spendKeyRegex.Match([]byte(cfg.SpendSecretKey)) {
+			Log.Println(Bright + Red + "Error: spend key is not valid" + Reset)
+			continue
+		}
+		break
 	}
+	for {
+		log.Println("SuchMiner has a default node list, which tries to connect to the local daemon first," +
+			"or to a public node in case of failure." + Reset)
+		isRunningDaemon := Prompt(Cyan + "Do you want to use the default node list? (y/N) " + Reset)
+		if !strings.HasPrefix(strings.ToLower(isRunningDaemon), "y") {
+			kind := Prompt(Cyan + "are you trying to connect to a daemon or proxy? (0: daemon, 1: proxy) " + Reset)
+			if kind != "0" && kind != "1" {
+				Log.Println(Red + "invalid choice, enter 0 or 1" + Reset)
+				continue
+			}
 
+			daemonUrl := Prompt(Cyan + "Enter the daemon/proxy's IP:PORT: " + Reset)
+			if len(daemonUrl) < 2 {
+				Log.Println(Red + "invalid URL" + Reset)
+			}
+
+			cfg.Pools = []Pool{
+				{
+					URL:    daemonUrl,
+					Daemon: kind == "0",
+				},
+			}
+		}
+		break
+	}
 }
 
-func setConfig() {
-	config := default_config
+func loadConfig() error {
+	b, err := os.ReadFile("./such_config.json")
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(b, cfg)
+	return err
+}
 
-	config = strings.Replace(config, "$ADDRESS", address, 1)
-	config = strings.Replace(config, "$SPEND", spendKey, 1)
-	config = strings.Replace(config, "$URL", url, 1)
-
-	os.WriteFile("./deps/config.json", []byte(config), 0600)
+func saveConfig() error {
+	err := os.WriteFile("./such_config.json", cfg.JSON(), 0o666)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(deps_folder+"/config.json", cfg.ToXMRIG().JSON(), 0o666)
 }
 
 type saveOutput struct {
 }
 
 func (so *saveOutput) Write(p []byte) (n int, err error) {
-	parseHashrate(string(p))
-
-	parseMsr(string(p))
+	pStr := string(p)
+	parseHashrate(pStr)
+	parseMsr(pStr)
+	parseErrors(pStr)
+	parseJob(pStr)
 
 	if debug {
 		os.Stdout.Write(p)
@@ -173,14 +211,89 @@ func parseHashrate(txt string) {
 	}
 
 	hashrate = hashrateNum
-	Log.Println(Reset+Cyan+"Hashrate:"+Yellow, uint64(hashrate), Cyan+"H/s")
+	Log.Println(Cyan+"Hashrate:"+Yellow, uint64(hashrate), Cyan+"H/s"+Reset)
 }
 
 func parseMsr(txt string) {
 	if strings.Contains(txt, "FAILED TO APPLY MSR") {
-		Log.Println(Reset + Red + "Failed to apply MSR mod: hashrate will be low.")
-		Log.Println(Red + "Try running this miner as root." + Reset)
+		Log.Println(Yellow + "Failed to apply MSR mod: hashrate will be low." + Reset)
+		Log.Println(Yellow + "Try running this miner as root/administrator to mine more efficiently." + Reset)
 	} else if strings.Contains(txt, "preset have been set") {
-		Log.Println(Reset + Green + "MSR mod has been applied! You are mining at best efficiency.")
+		Log.Println(Green + "MSR mod has been applied! You are mining at best efficiency." + Reset)
 	}
+}
+
+func parseErrors(txt string) {
+	if !strings.Contains(txt, "error:") {
+		return
+	}
+
+	txt = strings.Split(txt, "error:")[1]
+
+	Log.Println(Red+"WOWRig error:", txt+Reset)
+}
+
+func parseJob(txt string) {
+	if strings.Contains(txt, "accepted") {
+		if !strings.Contains(poolUrl, detect_donate) {
+			Log.Println(Bright + Green + "BLOCK FOUND!")
+			Log.Println(Bright + Green + strings.Split(txt, "accepted")[1] + Reset)
+		}
+		return
+	}
+
+	if !strings.Contains(txt, "new job from") {
+		return
+	}
+	s := strings.Split(strings.Split(txt, "new job from ")[1], " ")
+
+	nodeUrl := s[0]
+	rawDiff := s[2]
+	algo := s[4]
+
+	poolUrl = nodeUrl
+
+	diff, err := parseDiff(strings.ToLower(rawDiff))
+	if err != nil {
+		Log.Println(Red, err, Reset)
+	}
+
+	Log.Println(Cyan+"New job from", nodeUrl, "diff", rawDiff, "algo", algo+Reset)
+
+	if hashrate != 0 && difficulty != diff && diff != 0 {
+		difficulty = diff
+
+		timeSecs := difficulty / hashrate
+		blockTime := timeSecs / 60 / 60
+		const base = "With the current difficulty and hashrate, you are expected to find a block every"
+		if blockTime < 24*7 {
+			Log.Println(base+Yellow, math.Round(blockTime), "hours"+Reset, "in average")
+		} else {
+			Log.Println(base+Yellow, math.Round(blockTime/24), "days"+Reset, "in average")
+		}
+	}
+
+	difficulty = diff
+}
+
+func parseDiff(d string) (float64, error) {
+	var mult float64 = 0
+	if strings.HasSuffix(d, "g") {
+		d = strings.TrimSuffix(d, "g")
+		mult = 1_000_000_000
+	}
+	if strings.HasSuffix(d, "m") {
+		d = strings.TrimSuffix(d, "m")
+		mult = 1_000_000
+	}
+	if strings.HasSuffix(d, "k") {
+		d = strings.TrimSuffix(d, "k")
+		mult = 1_000
+	}
+
+	v, err := strconv.ParseFloat(d, 64)
+	if err != nil {
+		return 0, err
+	}
+	return v * mult, err
 }
