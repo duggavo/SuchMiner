@@ -69,7 +69,7 @@ func (c *Config) ToXMRIG() XmrigConfig {
 
 	return XmrigConfig{
 		Autosave:    false,
-		DonateLevel: 99,
+		DonateLevel: 5,
 		CPU:         true,
 		OpenCL:      false,
 		CUDA:        false,
