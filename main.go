@@ -53,10 +53,33 @@ const deps_folder = "deps_" + runtime.GOOS
 var logreader = LogReader{}
 
 func main() {
-	flag.BoolVar(&debug, "debug", false, "")
+	saveConfigAndQuit := false
+
+	flag.BoolVar(&debug, "debug", false, "runs SuchMiner in debug mode")
+	flag.BoolVar(&cfg.NonInteractive, "non-interactive", false, "runs SuchMiner in non-interactive mode")
+	flag.StringVar(&cfg.LogFile, "log-file", cfg.LogFile, "defines the log file")
+	flag.StringVar(&cfg.Wallet, "wallet", cfg.Wallet, "wownero wallet address to mine at")
+	flag.StringVar(&cfg.SpendSecretKey, "spend-secret-key", cfg.SpendSecretKey, "secret spend key")
+	var poolsJson string
+	flag.StringVar(&poolsJson, "pools", "", "the pools to use in JSON array format")
+
+	flag.BoolVar(&saveConfigAndQuit, "save-config-and-quit", false, "Saves the configuration provided by command-line flags and quits")
 	flag.Parse()
 
 	loadCfgErr := loadConfig()
+
+	if poolsJson != "" {
+		err := json.Unmarshal([]byte(poolsJson), &cfg.Pools)
+		if err != nil {
+			fmt.Println(Red, err, Reset)
+		}
+	}
+
+	if saveConfigAndQuit {
+		saveConfig()
+		fmt.Println("configuration file saved, quitting")
+		return
+	}
 
 	if cfg.LogFile != "" {
 		var err error
@@ -80,7 +103,15 @@ func main() {
 		if debug {
 			Log.Println(Red, loadCfgErr, Reset)
 		}
-		configPrompt()
+		if cfg.Wallet == "" || len(cfg.Pools) == 0 || cfg.SpendSecretKey == "" {
+			if cfg.NonInteractive {
+				Log.Println(Red, "SuchMiner is not correctly configured and non-interactive mode is enabled"+Reset)
+				os.Exit(1)
+				return
+			} else {
+				configPrompt()
+			}
+		}
 		if err := saveConfig(); err != nil {
 			panic(err)
 		}

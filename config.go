@@ -24,6 +24,7 @@ type Config struct {
 	Wallet         string `json:"wallet"`
 	SpendSecretKey string `json:"spend-secret-key"`
 	LogFile        string `json:"log-file,omitempty"`
+	NonInteractive bool   `json:"non-interactive,omitempty"`
 }
 
 type Pool struct {
