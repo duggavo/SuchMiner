@@ -9,3 +9,5 @@ const Yellow = "\u001b[33m"
 const Magenta = "\u001b[35m"
 const Cyan = "\u001b[36m"
 const Bright = "\u001b[1m"
+
+var allColors = []string{}

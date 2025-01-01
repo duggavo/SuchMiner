@@ -23,6 +23,7 @@ type Config struct {
 	Pools          []Pool `json:"pools"`
 	Wallet         string `json:"wallet"`
 	SpendSecretKey string `json:"spend-secret-key"`
+	LogFile        string `json:"log-file,omitempty"`
 }
 
 type Pool struct {
@@ -62,21 +63,22 @@ func (p Pool) toXmrig(config *Config) XmrigPool {
 }
 
 func (c *Config) ToXMRIG() XmrigConfig {
-	pools := make([]XmrigPool, len(c.Pools))
-	for i := range pools {
-		pools[i] = c.Pools[i].toXmrig(c)
-	}
-
-	return XmrigConfig{
+	conf := XmrigConfig{
 		Autosave:    false,
 		DonateLevel: 5,
 		CPU:         true,
 		OpenCL:      false,
 		CUDA:        false,
-		Pools:       pools,
+		Pools:       make([]XmrigPool, len(c.Pools)),
 		Retries:     4,
 		RetryPause:  2,
 	}
+
+	for i := range c.Pools {
+		conf.Pools[i] = c.Pools[i].toXmrig(c)
+	}
+
+	return conf
 }
 
 func (c *Config) JSON() []byte {

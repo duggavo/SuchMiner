@@ -50,23 +50,35 @@ var spendKeyRegex = regexp.MustCompile("^[0-9a-fA-F]{64}$")
 const detect_donate = "wowrig.mooo.com"
 const deps_folder = "deps_" + runtime.GOOS
 
+var logreader = LogReader{}
+
 func main() {
 	flag.BoolVar(&debug, "debug", false, "")
 	flag.Parse()
 
-	if debug {
-		Log = log.New(os.Stdout, Reset, log.Ldate|log.Ltime|log.Lshortfile)
-	} else {
-		Log = log.New(os.Stdout, Reset, log.Ldate|log.Ltime)
+	loadCfgErr := loadConfig()
+
+	if cfg.LogFile != "" {
+		var err error
+		logreader.File, err = os.OpenFile(cfg.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Println(Red, err, Reset)
+		} else {
+			fmt.Println("Using log file:", cfg.LogFile)
+		}
 	}
 
-	Log.Println(Reset + Cyan)
-	Log.Println(Cyan+"Starting", Magenta+Bright+"Such"+Yellow+"Miner "+Reset+Cyan+"v"+VERSION+
-		"\n"+Reset)
+	if debug {
+		Log = log.New(logreader, Reset, log.Ldate|log.Ltime|log.Lshortfile)
+	} else {
+		Log = log.New(logreader, Reset, log.Ldate|log.Ltime)
+	}
 
-	if err := loadConfig(); err != nil {
+	Log.Println(Cyan+"Starting", Magenta+Bright+"Such"+Yellow+"Miner "+Reset+Cyan+"v"+VERSION+Reset)
+
+	if loadCfgErr != nil {
 		if debug {
-			Log.Println(err)
+			Log.Println(Red, loadCfgErr, Reset)
 		}
 		configPrompt()
 		if err := saveConfig(); err != nil {
@@ -167,10 +179,7 @@ func (so *saveOutput) Write(p []byte) (n int, err error) {
 	parseErrors(pStr)
 	parseJob(pStr)
 
-	if debug {
-		os.Stdout.Write(p)
-	}
-	return len(p), nil
+	return logreader.File.Write(p)
 }
 
 func Prompt(l string) string {
