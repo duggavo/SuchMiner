@@ -20,11 +20,12 @@ package main
 import "encoding/json"
 
 type Config struct {
-	Pools          []Pool `json:"pools"`
-	Wallet         string `json:"wallet"`
-	SpendSecretKey string `json:"spend-secret-key"`
-	LogFile        string `json:"log-file,omitempty"`
-	NonInteractive bool   `json:"non-interactive,omitempty"`
+	Pools          []Pool        `json:"pools"`
+	Wallet         string        `json:"wallet"`
+	SpendSecretKey string        `json:"spend-secret-key"`
+	LogFile        string        `json:"log-file,omitempty"`
+	NonInteractive bool          `json:"non-interactive,omitempty"`
+	HttpApi        HttpApiConfig `json:"http-api"`
 }
 
 type Pool struct {
@@ -33,7 +34,20 @@ type Pool struct {
 	TLS    bool   `json:"tls,omitempty"`
 }
 
+type HttpApiConfig struct {
+	Enabled     bool    `json:"enabled"`
+	Host        string  `json:"host"`
+	Port        uint16  `json:"port"`
+	AccessToken *string `json:"access-token"`
+}
+
 var cfg = &Config{
+	HttpApi: HttpApiConfig{
+		Enabled:     false,
+		Host:        "127.0.0.1",
+		Port:        0,
+		AccessToken: nil,
+	},
 	Pools: []Pool{
 		{ // local node
 			URL:    "127.0.0.1:34568",
@@ -73,6 +87,7 @@ func (c *Config) ToXMRIG() XmrigConfig {
 		Pools:       make([]XmrigPool, len(c.Pools)),
 		Retries:     4,
 		RetryPause:  2,
+		Http:        c.HttpApi,
 	}
 
 	for i := range c.Pools {

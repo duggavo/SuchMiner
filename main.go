@@ -62,6 +62,8 @@ func main() {
 	flag.StringVar(&cfg.SpendSecretKey, "spend-secret-key", cfg.SpendSecretKey, "secret spend key")
 	var poolsJson string
 	flag.StringVar(&poolsJson, "pools", "", "the pools to use in JSON array format")
+	var apiBind string
+	flag.StringVar(&apiBind, "api-bind", "", "if set to IP:PORT, enables the API and binds it to the provided address")
 
 	flag.BoolVar(&saveConfigAndQuit, "save-config-and-quit", false, "Saves the configuration provided by command-line flags and quits")
 	flag.Parse()
@@ -72,6 +74,22 @@ func main() {
 		err := json.Unmarshal([]byte(poolsJson), &cfg.Pools)
 		if err != nil {
 			fmt.Println(Red, err, Reset)
+		}
+	}
+
+	if apiBind != "" {
+		splApi := strings.Split(apiBind, ":")
+		if len(splApi) < 2 {
+			fmt.Println(Yellow, "api-bind is not in valid IP:PORT format", Reset)
+		} else {
+			cfg.HttpApi.Enabled = true
+			cfg.HttpApi.Host = splApi[0]
+			apiPort, err := strconv.ParseUint(splApi[1], 10, 16)
+			if err != nil {
+				fmt.Println(Yellow, err, Reset)
+			} else {
+				cfg.HttpApi.Port = uint16(apiPort)
+			}
 		}
 	}
 

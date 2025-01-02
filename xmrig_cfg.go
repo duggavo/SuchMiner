@@ -20,14 +20,15 @@ package main
 import "encoding/json"
 
 type XmrigConfig struct {
-	Autosave    bool        `json:"autosave"`
-	DonateLevel int         `json:"donate-level"`
-	CPU         bool        `json:"cpu"`
-	OpenCL      bool        `json:"opencl"`
-	CUDA        bool        `json:"cuda"`
-	Pools       []XmrigPool `json:"pools"`
-	Retries     int         `json:"retries,omitempty"`
-	RetryPause  int         `json:"retry-pause,omitempty"`
+	Autosave    bool          `json:"autosave"`
+	DonateLevel int           `json:"donate-level"`
+	CPU         bool          `json:"cpu"`
+	OpenCL      bool          `json:"opencl"`
+	CUDA        bool          `json:"cuda"`
+	Pools       []XmrigPool   `json:"pools"`
+	Retries     int           `json:"retries,omitempty"`
+	RetryPause  int           `json:"retry-pause,omitempty"`
+	Http        HttpApiConfig `json:"http"`
 }
 type XmrigPool struct {
 	Algo           *string `json:"algo"`
