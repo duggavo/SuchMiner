@@ -36,8 +36,6 @@ var debug = false
 
 var Log *log.Logger
 
-const VERSION = "2.0.0"
-
 var hashrate float64 = 0
 var difficulty float64 = 0
 var poolUrl string = ""
@@ -121,23 +119,21 @@ func main() {
 		if debug {
 			Log.Println(Red, loadCfgErr, Reset)
 		}
-		if cfg.Wallet == "" || len(cfg.Pools) == 0 || cfg.SpendSecretKey == "" {
-			if cfg.NonInteractive {
-				Log.Println(Red, "SuchMiner is not correctly configured and non-interactive mode is enabled"+Reset)
-				os.Exit(1)
-				return
-			} else {
-				configPrompt()
-			}
-		}
-		if err := saveConfig(); err != nil {
-			panic(err)
-		}
-	} else {
-		if err := saveConfig(); err != nil {
-			Log.Println(Red + err.Error() + Reset)
+	}
+	if cfg.Wallet == "" || len(cfg.Pools) == 0 || cfg.SpendSecretKey == "" {
+		if cfg.NonInteractive {
+			Log.Println(Red, "SuchMiner is not correctly configured and non-interactive mode is enabled"+Reset)
+			os.Exit(1)
+			return
+		} else {
+			configPrompt()
 		}
 	}
+	if err := saveConfig(); err != nil {
+		panic(err)
+	}
+
+	go checkForUpdates()
 
 	var wowrig *exec.Cmd
 	if runtime.GOOS == "windows" {
